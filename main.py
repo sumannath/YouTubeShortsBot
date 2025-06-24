@@ -1,5 +1,8 @@
+import itertools
 import os
 import random
+import sys
+import threading
 import time
 from datetime import datetime
 
@@ -9,16 +12,21 @@ from google import genai
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from moviepy import VideoFileClip, TextClip, CompositeVideoClip
+from moviepy import VideoFileClip, TextClip, AudioFileClip, CompositeVideoClip
+from moviepy import afx
+
+from config import constants
 
 
 class YouTubeShortsBot:
     def __init__(self):
         # Configuration
-        load_dotenv()
+        load_dotenv(os.path.join(constants.CONFIG_DIR, '.env'))
+
         self.gemini_api_key = os.getenv('GOOGLE_GEMINI_API_KEY')
         self.youtube_credentials_file = "youtube_credentials.json"
-        self.background_videos_folder = "background_videos"
+        self.background_videos_folder = os.path.join(constants.ASSETS_DIR, 'background_videos')
+        self.audios_folder = os.path.join(constants.ASSETS_DIR, 'audio_tracks')
         self.output_folder = "generated_shorts"
 
         # Ensure folders exist
@@ -44,10 +52,29 @@ class YouTubeShortsBot:
 
         Return only the quote text, nothing else."""
 
+        stop_event = threading.Event()
+
+        def loader():
+            spinner = itertools.cycle(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'])
+            sys.stdout.write("Generating quote from Gemini... ")
+            while not stop_event.is_set():
+                sys.stdout.write(next(spinner))
+                sys.stdout.flush()
+                time.sleep(0.1)
+                sys.stdout.write('\b')
+            sys.stdout.write("Done!\n")
+
         try:
+            t = threading.Thread(target=loader)
+            t.start()
+
             response = client.models.generate_content(
                 model="gemini-2.5-flash", contents=prompt
             )
+
+            stop_event.set()
+            t.join()
+
             quote = response.text
             quote = quote.replace('"', '').replace("'", "")
             print(f"Generated quote from Gemini: {quote}")
@@ -72,7 +99,7 @@ class YouTubeShortsBot:
         ]
         return random.choice(fallback_quotes)
 
-    def create_video_short(self, quote_text, background_video_path, output_filename):
+    def create_video_short(self, quote_text, background_video_path, audio_path, output_filename):
         """Create a video short with quote overlay"""
         try:
             # Load background video
@@ -83,21 +110,31 @@ class YouTubeShortsBot:
             if background.w > 1080:
                 background = background.cropped(x_center=background.w / 2, width=1080)
 
-            # Limit duration to 60 seconds max for YouTube Shorts
-            if background.duration > 60:
-                background = background.subclip(0, 60)
+            # Limit duration to 20 seconds max for YouTube Shorts
+            if background.duration > 20:
+                background = background.subclip(0, 20)
+
+            # Load audio track
+            audio_clip = AudioFileClip(audio_path)
+            if audio_clip.duration < background.duration:
+                # Loop audio if shorter than video
+                audio_clip = audio_clip.with_effects([afx.AudioLoop(duration=background.duration)])
+            elif audio_clip.duration > background.duration:
+                # Trim audio if longer than video
+                audio_clip = audio_clip.with_duration(background.duration)
 
             # Create text clip
             text_clip = TextClip(
                 text=quote_text,
-                font=None,
+                font=os.path.join(constants.FONTS_DIR, os.getenv('FONT_PATH')),
                 font_size=70,
                 color='white',
                 stroke_color='black',
                 stroke_width=3,
                 method='caption',
-                size=(900, None),
+                size=(900, 1920),
                 text_align="center",
+                margin=(100, 50),
                 duration=background.duration
             )
 
@@ -106,15 +143,18 @@ class YouTubeShortsBot:
 
             # Export with optimized settings for YouTube
             output_path = os.path.join(self.output_folder, output_filename)
+            final_video = final_video.with_audio(audio_clip)
             final_video.write_videofile(
                 output_path,
                 fps=30,
                 codec='libx264',
+                audio=True,
                 audio_codec='aac',
-                temp_audiofile='temp-audio.m4a',
+                temp_audiofile='temp-audio_tracks.m4a',
                 remove_temp=True,
                 preset='medium',
-                ffmpeg_params=['-crf', '23']
+                ffmpeg_params=['-crf', '23'],
+                threads=8
             )
 
             # Clean up
@@ -170,7 +210,8 @@ class YouTubeShortsBot:
             # Get random category and quote source
             category = random.choice(self.quote_categories)
 
-            quote = self.get_quote_from_gemini(category)
+            # quote = self.get_quote_from_gemini(category)
+            quote = self.get_fallback_quote()  # For testing, use fallback quote
 
             # Get random background video
             background_videos = [f for f in os.listdir(self.background_videos_folder)
@@ -183,12 +224,22 @@ class YouTubeShortsBot:
             background_video = random.choice(background_videos)
             background_path = os.path.join(self.background_videos_folder, background_video)
 
+            # Get random audio track
+            audio_tracks = [f for f in os.listdir(self.audios_folder)
+                            if f.lower().endswith(('.mp3', '.wav', '.aac'))]
+            if not audio_tracks:
+                print("No audio tracks found! Please add audio files to the audio_tracks folder.")
+                return False
+
+            audio_track = random.choice(audio_tracks)
+            audio_path = os.path.join(self.audios_folder, audio_track)
+
             # Generate filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_filename = f"short_{timestamp}.mp4"
 
             # Create video
-            video_path = self.create_video_short(quote, background_path, output_filename)
+            video_path = self.create_video_short(quote, background_path, audio_path, output_filename)
             if not video_path:
                 return False
 
@@ -238,8 +289,12 @@ class YouTubeShortsBot:
 if __name__ == "__main__":
     bot = YouTubeShortsBot()
 
+    if os.getenv('FONT_PATH') is None:
+        print("Please set the FONT_PATH environment variable in your .env file.")
+        sys.exit(1)
+
     # For testing - generate one short immediately
     bot.generate_and_upload_short()
 
     # For production - run scheduled uploads
-    bot.run_daily_uploads()
+    # bot.run_daily_uploads()
