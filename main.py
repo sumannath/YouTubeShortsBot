@@ -350,11 +350,15 @@ class YouTubeShortsBot:
         """Schedule and run daily uploads"""
         print("Starting YouTube Shorts automation...")
 
-        # Schedule 2 uploads per day
-        schedule.every().day.at("09:00").do(self.generate_and_upload_short)
-        schedule.every().day.at("18:00").do(self.generate_and_upload_short)
+        # Schedule 6 uploads per day
+        schedule.every().day.at("00:00").do(self.generate_and_upload_short)
+        schedule.every().day.at("04:00").do(self.generate_and_upload_short)
+        schedule.every().day.at("08:00").do(self.generate_and_upload_short)
+        schedule.every().day.at("12:00").do(self.generate_and_upload_short)
+        schedule.every().day.at("16:00").do(self.generate_and_upload_short)
+        schedule.every().day.at("20:00").do(self.generate_and_upload_short)
 
-        print("Scheduled uploads at 9:00 AM and 6:00 PM daily")
+        print("Scheduled daily uploads at 00:00, 04:00, 08:00, 12:00, 16:00, and 20:00 UTC.")
 
         while True:
             schedule.run_pending()
@@ -369,8 +373,5 @@ if __name__ == "__main__":
         print("Please set the FONT_PATH environment variable in your .env file.")
         sys.exit(1)
 
-    # For testing - generate one short immediately
-    bot.generate_and_upload_short()
-
     # For production - run scheduled uploads
-    # bot.run_daily_uploads()
+    bot.run_daily_uploads()
