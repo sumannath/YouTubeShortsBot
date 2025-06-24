@@ -4,7 +4,7 @@ APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 ASSETS_DIR = os.path.join(APP_DIR, 'assets')
 FONTS_DIR = os.path.join(ASSETS_DIR, 'fonts')
-
+DATA_DIR = os.path.join(APP_DIR, 'data')
 CONFIG_DIR = os.path.join(APP_DIR, 'config')
 
 FALLBACK_QUOTES = [
@@ -19,3 +19,7 @@ FALLBACK_QUOTES = [
     "Challenges aren't meant to break you; they're designed to reveal your resilience. When faced with a hurdle, remember your inner strength.You possess the wisdom to navigate, the power to overcome, and the grit to emerge even more formidable.",
     "Don't just dream of a better future; actively construct it, brick by imaginative brick. Your actions today are the foundation of your tomorrow. Be intentional, be bold, and build a reality that truly reflects your highest aspirations."
 ]
+
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+CLIENT_SECRETS_FILE = os.path.join(CONFIG_DIR, 'client_secret.json')
+YOUTUBE_TOKEN_FILE = os.path.join(CONFIG_DIR, 'yt_token.json')

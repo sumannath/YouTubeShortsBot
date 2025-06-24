@@ -1,5 +1,6 @@
 import itertools
 import os
+import pickle
 import random
 import sys
 import textwrap
@@ -10,8 +11,10 @@ from datetime import datetime
 import schedule
 from dotenv import load_dotenv
 from google import genai
-from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from moviepy import VideoFileClip, TextClip, AudioFileClip, CompositeVideoClip
 from moviepy import afx, vfx
@@ -25,7 +28,11 @@ class YouTubeShortsBot:
         load_dotenv(os.path.join(constants.CONFIG_DIR, '.env'))
 
         self.gemini_api_key = os.getenv('GOOGLE_GEMINI_API_KEY')
-        self.youtube_credentials_file = "youtube_credentials.json"
+        self.youtube_secrets_file = constants.CLIENT_SECRETS_FILE
+        self.youtube_token_file = constants.YOUTUBE_TOKEN_FILE
+        self.scopes = constants.SCOPES
+        self.redirect_uri = 'http://localhost/'
+        self.fallback_quotes = constants.FALLBACK_QUOTES
         self.background_videos_folder = os.path.join(constants.ASSETS_DIR, 'background_videos')
         self.audios_folder = os.path.join(constants.ASSETS_DIR, 'audio_tracks')
         self.output_folder = "generated_shorts"
@@ -88,7 +95,7 @@ class YouTubeShortsBot:
 
     def get_fallback_quote(self):
         """Fallback quotes if API fails"""
-        return random.choice(constants.FALLBACK_QUOTES)
+        return random.choice(self.fallback_quotes)
 
     def create_video_short(self, quote_text, background_video_path, audio_path, output_filename):
         """Create a video short with quote overlay"""
@@ -104,7 +111,7 @@ class YouTubeShortsBot:
             # Limit duration to CLIP_DURATION seconds max for YouTube Shorts
             clip_duration = float(os.getenv('CLIP_DURATION', 20))  # Default to 20 seconds if not set
             if background.duration > clip_duration:
-                background = background.subclip(0, clip_duration)
+                background = background.with_duration(clip_duration)
             elif background.duration < clip_duration:
                 # Loop background if shorter than CLIP_DURATION
                 background = background.with_effects([vfx.Loop()]).with_duration(clip_duration)
@@ -150,7 +157,7 @@ class YouTubeShortsBot:
                 codec='libx264',
                 audio=True,
                 audio_codec='aac',
-                temp_audiofile='temp-audio_tracks.m4a',
+                temp_audiofile=os.path.join(constants.DATA_DIR, 'temp-audio_tracks.m4a'),
                 remove_temp=True,
                 preset='medium',
                 ffmpeg_params=['-crf', '23'],
@@ -168,19 +175,81 @@ class YouTubeShortsBot:
             print(f"Error creating video: {e}")
             return None
 
+    def get_authenticated_service(self):
+        """Authenticates with YouTube and returns the service object."""
+        creds = None
+
+        # Load existing token from pickle file
+        if os.path.exists(self.youtube_token_file):
+            try:
+                with open(self.youtube_token_file, 'rb') as token_file:
+                    creds = pickle.load(token_file)
+                print(f"Loaded credentials from {self.youtube_token_file}")
+            except Exception as e:
+                print(f"Error loading token file: {e}")
+                # Remove corrupted token file
+                try:
+                    os.remove(self.youtube_token_file)
+                except:
+                    pass
+
+        # If no valid credentials, get new ones
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                try:
+                    print("Refreshing expired token...")
+                    creds.refresh(Request())
+                    print("Token refreshed successfully")
+                except Exception as e:
+                    print(f"Error refreshing token: {e}")
+                    creds = None
+
+            if not creds:
+                if not os.path.exists(self.youtube_secrets_file):
+                    print(f"Credentials file not found: {self.youtube_secrets_file}")
+                    return False
+
+                # For headless systems, this will fail
+                # You need to run this once on a system with a browser
+                try:
+                    print("Starting OAuth flow...")
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        self.youtube_secrets_file, self.scopes
+                    )
+                    creds = flow.run_local_server(port=0)
+                    print("OAuth flow completed successfully")
+                except Exception as e:
+                    print(f"Authentication failed: {e}")
+                    print("For headless systems:")
+                    print("1. Run this script once on a machine with a browser")
+                    print(f"2. Copy the generated {self.youtube_token_file} to your headless system")
+                    return False
+
+            # Save credentials using pickle
+            try:
+                with open(self.youtube_token_file, 'wb') as token_file:
+                    pickle.dump(creds, token_file)
+                print(f"Credentials saved to {self.youtube_token_file}")
+
+                # Set restrictive permissions on token file for security
+                os.chmod(self.youtube_token_file, 0o600)
+            except Exception as e:
+                print(f"Warning: Could not save token file: {e}")
+
+        return build("youtube", "v3", credentials=creds)
+
+
     def upload_to_youtube(self, video_path, title, description, tags):
         """Upload video to YouTube"""
         try:
-            # Load YouTube API credentials
-            credentials = Credentials.from_authorized_user_file(self.youtube_credentials_file)
-            youtube = build('youtube', 'v3', credentials=credentials)
+            yt_svc = self.get_authenticated_service()
 
             body = {
                 'snippet': {
                     'title': title,
                     'description': description,
                     'tags': tags,
-                    'categoryId': '22',  # People & Blogs
+                    'categoryId': '22',
                     'defaultLanguage': 'en'
                 },
                 'status': {
@@ -191,16 +260,23 @@ class YouTubeShortsBot:
 
             media = MediaFileUpload(video_path, mimetype='video/mp4', resumable=True)
 
-            request = youtube.videos().insert(
+            request = yt_svc.videos().insert(
                 part=','.join(body.keys()),
                 body=body,
                 media_body=media
             )
 
-            response = request.execute()
-            print(f"Video uploaded successfully: https://youtube.com/watch?v={response['id']}")
-            return True
+            response = None
+            while response is None:
+                status, response = request.next_chunk()
+                if status:
+                    print(f"Uploaded {int(status.progress() * 100)}%")
 
+            print(f"Upload Complete! Video ID: {response['id']}")
+            print(f"Video URL: https://www.youtube.com/watch?v={response['id']}")
+            return True
+        except HttpError as e:
+            print(f"An HTTP error {e.resp.status} occurred: {e.content}")
         except Exception as e:
             print(f"Error uploading to YouTube: {e}")
             return False
@@ -258,15 +334,14 @@ class YouTubeShortsBot:
 
             tags = ['motivation', 'inspiration', 'quotes', 'shorts', 'success', 'mindset', 'daily', 'motivational']
 
-            # success = self.upload_to_youtube(video_path, title, description, tags)
-            #
-            # if success:
-            #     print(f"Successfully created and uploaded: {output_filename}")
-            #     # Optionally delete the local file to save space
-            #     # os.remove(video_path)
-            #
-            # return success
+            success = self.upload_to_youtube(video_path, title, description, tags)
 
+            if success:
+                print(f"Successfully created and uploaded: {output_filename}")
+                # Optionally delete the local file to save space
+                # os.remove(video_path)
+
+            return success
         except Exception as e:
             print(f"Error in generate_and_upload_short: {e}")
             return False
