@@ -2,6 +2,7 @@ import itertools
 import os
 import random
 import sys
+import textwrap
 import threading
 import time
 from datetime import datetime
@@ -13,7 +14,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from moviepy import VideoFileClip, TextClip, AudioFileClip, CompositeVideoClip
-from moviepy import afx
+from moviepy import afx, vfx
 
 from config import constants
 
@@ -45,10 +46,11 @@ class YouTubeShortsBot:
 
         prompt = f"""Generate an original, inspiring {category} quote that would work well for a YouTube Short. 
         The quote should be:
-        - about 25 words maximum
+        - about 50 words maximum
         - Motivational and positive
         - Easy to read on screen
         - Not from any famous person (original)
+        - The quote should have an immediate punch
 
         Return only the quote text, nothing else."""
 
@@ -81,23 +83,12 @@ class YouTubeShortsBot:
             return quote
         except Exception as e:
             print(f"Error getting quote from Gemini: {e}")
+            stop_event.set()
             return self.get_fallback_quote()
 
     def get_fallback_quote(self):
         """Fallback quotes if API fails"""
-        fallback_quotes = [
-            "Success doesn’t come overnight. Stay consistent, stay patient. Small steps every day create momentum that leads to massive, life-changing results.",
-            "Your journey is yours alone. Don’t compare. Keep showing up, even when it’s hard. That’s how strength and greatness are built.",
-            "The only limit is the one you place on yourself. Believe bigger, act bolder, and watch your life transform beyond imagination.",
-            "Discipline beats motivation. Show up on the days you don’t feel like it—those are the days that shape your future the most.",
-            "Fear is normal. Let it walk beside you, not control you. Courage is action in the presence of fear, not the absence of it.",
-            "Don’t wait for the perfect time—it doesn’t exist. Start now, with what you have. Progress loves action, not perfection.",
-            "Your comfort zone is beautiful, but nothing ever grows there. Step out. That’s where the magic of growth, change, and strength begins.",
-            "You’re stronger than you think. Every setback is a setup for a comeback. Keep going—you haven’t come this far just to stop now.",
-            "Greatness isn’t born; it’s earned with sweat, late nights, and persistence. Keep grinding. The effort will echo in your success story.",
-            "Each day is a fresh page. Write boldly. Mistakes don’t define you—how you rise after them does. Keep rewriting your story with strength."
-        ]
-        return random.choice(fallback_quotes)
+        return random.choice(constants.FALLBACK_QUOTES)
 
     def create_video_short(self, quote_text, background_video_path, audio_path, output_filename):
         """Create a video short with quote overlay"""
@@ -110,9 +101,13 @@ class YouTubeShortsBot:
             if background.w > 1080:
                 background = background.cropped(x_center=background.w / 2, width=1080)
 
-            # Limit duration to 20 seconds max for YouTube Shorts
-            if background.duration > 20:
-                background = background.subclip(0, 20)
+            # Limit duration to CLIP_DURATION seconds max for YouTube Shorts
+            clip_duration = float(os.getenv('CLIP_DURATION', 20))  # Default to 20 seconds if not set
+            if background.duration > clip_duration:
+                background = background.subclip(0, clip_duration)
+            elif background.duration < clip_duration:
+                # Loop background if shorter than CLIP_DURATION
+                background = background.with_effects([vfx.Loop()]).with_duration(clip_duration)
 
             # Load audio track
             audio_clip = AudioFileClip(audio_path)
@@ -123,17 +118,21 @@ class YouTubeShortsBot:
                 # Trim audio if longer than video
                 audio_clip = audio_clip.with_duration(background.duration)
 
+            # Wrap the text to a maximum width of 30 characters
+            wrapped_text = textwrap.fill(quote_text, width=30)
+
             # Create text clip
             text_clip = TextClip(
-                text=quote_text,
+                text=wrapped_text,
                 font=os.path.join(constants.FONTS_DIR, os.getenv('FONT_PATH')),
-                font_size=70,
                 color='white',
                 stroke_color='black',
                 stroke_width=3,
                 method='caption',
                 size=(900, 1920),
+                font_size=70,
                 text_align="center",
+                interline=8,
                 margin=(100, 50),
                 duration=background.duration
             )
@@ -144,6 +143,7 @@ class YouTubeShortsBot:
             # Export with optimized settings for YouTube
             output_path = os.path.join(self.output_folder, output_filename)
             final_video = final_video.with_audio(audio_clip)
+
             final_video.write_videofile(
                 output_path,
                 fps=30,
@@ -159,6 +159,7 @@ class YouTubeShortsBot:
 
             # Clean up
             background.close()
+            audio_clip.close()
             final_video.close()
 
             return output_path
@@ -210,8 +211,8 @@ class YouTubeShortsBot:
             # Get random category and quote source
             category = random.choice(self.quote_categories)
 
-            # quote = self.get_quote_from_gemini(category)
-            quote = self.get_fallback_quote()  # For testing, use fallback quote
+            quote = self.get_quote_from_gemini(category)
+            # quote = self.get_fallback_quote()  # For testing, use fallback quote
 
             # Get random background video
             background_videos = [f for f in os.listdir(self.background_videos_folder)
