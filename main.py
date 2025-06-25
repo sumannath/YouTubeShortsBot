@@ -38,10 +38,13 @@ class YouTubeShortsBot:
         self.fallback_stories = constants.FALLBACK_STORIES
         self.background_videos_folder = os.path.join(constants.ASSETS_DIR, 'background_videos')
         self.audios_folder = os.path.join(constants.ASSETS_DIR, 'audio_tracks')
+        self.fonts_folder = constants.FONTS_DIR
         self.output_folder = os.path.join(constants.DATA_DIR, 'generated_shorts')
 
         # Ensure folders exist
         os.makedirs(self.background_videos_folder, exist_ok=True)
+        os.makedirs(self.audios_folder, exist_ok=True)
+        os.makedirs(self.fonts_folder, exist_ok=True)
         os.makedirs(self.output_folder, exist_ok=True)
 
         # Story categories for variety
@@ -119,7 +122,7 @@ class YouTubeShortsBot:
             # Create text clip
             text_clip = TextClip(
                 text=wrapped_text,
-                font=os.path.join(constants.FONTS_DIR, os.getenv('FONT_PATH')),
+                font=os.path.join(self.fonts_folder, os.getenv('FONT_PATH')),
                 color='white',
                 stroke_color='black',
                 stroke_width=3,
@@ -268,6 +271,7 @@ class YouTubeShortsBot:
             return True
         except HttpError as e:
             logging.error(f"An HTTP error {e.resp.status} occurred: {e.content}")
+            return False
         except Exception as e:
             logging.error(f"Error uploading to YouTube: {e}")
             return False
@@ -338,7 +342,7 @@ class YouTubeShortsBot:
             success = self.upload_to_youtube(video_path, title, description, tags)
 
             if success:
-                logging.info(f"Successfully created and uploaded: {video_path}")
+                logging.info(f"Successfully created and uploaded video")
                 # Delete the local file to save space
                 os.remove(video_path)
 
@@ -371,6 +375,8 @@ class YouTubeShortsBot:
 # Usage example
 if __name__ == "__main__":
     bot = YouTubeShortsBot()
+
+    bot.generate_and_upload_short()
 
     if os.getenv('FONT_PATH') is None:
         logging.error("Please set the FONT_PATH environment variable in your .env file.")
