@@ -9,7 +9,7 @@ data/
 assets/
 
 # Ignore sensitive files
-.env
+config/.env
 config/client_secret.json
 config/yt_token.json
 

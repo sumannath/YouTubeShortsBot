@@ -316,9 +316,11 @@ class YouTubeShortsBot:
             logging.error(f"Error in generate_short: {e}")
             return None
 
-    def generate_and_upload_short(self, story):
+    def generate_and_upload_short(self):
         """Generate a single short and upload it"""
         try:
+            story = self.get_story()
+
             # Generate a short video
             video_path = self.generate_short(story)
             # Upload to YouTube
@@ -373,9 +375,6 @@ if __name__ == "__main__":
     if os.getenv('FONT_PATH') is None:
         logging.error("Please set the FONT_PATH environment variable in your .env file.")
         sys.exit(1)
-
-    story = bot.get_story()
-    bot.generate_and_upload_short(story)
 
     # For production - run scheduled uploads
     bot.run_daily_uploads()
