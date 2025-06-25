@@ -3,6 +3,7 @@ google-auth
 google-api-python-client
 google-auth-oauthlib
 requests
+pytz
 schedule
 python-dotenv
 google-genai

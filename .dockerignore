@@ -1,0 +1,17 @@
+# Ignore build artifacts and temporary files
+build/
+tmp/
+*.log
+data/
+.venv
+
+# Ignore assets and cache directories
+assets/
+
+# Ignore sensitive files
+.env
+config/client_secret.json
+config/yt_token.json
+
+# Ignore version control specific directories
+.git/
