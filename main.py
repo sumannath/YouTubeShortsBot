@@ -267,7 +267,7 @@ class YouTubeShortsBot:
                     logging.info(f"Uploaded {int(status.progress() * 100)}%")
 
             logging.info(f"Upload Complete! Video ID: {response['id']}")
-            logging.info(f"Video URL: https://www.youtube.com/watch?v={response['id']}")
+            logging.info(f"Video URL: https://www.youtube.com/shorts/{response['id']}")
             return True
         except HttpError as e:
             logging.error(f"An HTTP error {e.resp.status} occurred: {e.content}")
