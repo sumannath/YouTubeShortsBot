@@ -81,9 +81,26 @@ class VideoCreator:
             elif audio_clip.duration > background.duration:
                 audio_clip = audio_clip.with_duration(background.duration)
 
-            # Create text clip
+            # Create title clip
+            wrapped_text = textwrap.fill(story['title'], width=30)
+            title_clip = TextClip(
+                text=wrapped_text,
+                font=os.path.join(self.fonts_folder, os.getenv('FONT_PATH')),
+                color='white',
+                stroke_color='black',
+                stroke_width=3,
+                method='caption',
+                size=(900, 300),
+                font_size=90,
+                text_align="center",
+                interline=8,
+                margin=(100, 50),
+                duration=background.duration
+            )
+
+            # Create story clip
             wrapped_text = textwrap.fill(story['story'], width=30)
-            text_clip = TextClip(
+            story_clip = TextClip(
                 text=wrapped_text,
                 font=os.path.join(self.fonts_folder, os.getenv('FONT_PATH')),
                 color='white',
@@ -100,7 +117,7 @@ class VideoCreator:
 
             # Compose final video
             logging.info("Creating video composite...")
-            final_video = CompositeVideoClip([background, text_clip])
+            final_video = CompositeVideoClip([background, title_clip, story_clip])
             final_video = final_video.with_audio(audio_clip)
 
             # Export video

@@ -27,12 +27,14 @@ class StoryGenerator:
 
         client = genai.Client(api_key=self.gemini_api_key)
 
-        prompt = f"""Generate an original, engaging {category} story that would work well for a YouTube Short. 
+        prompt = f"""Generate an original, simple but interesting {category} story that would work well for a YouTube Short. 
                     The story should be:
                     - about 50 words maximum
                     - Easy to read on screen
                     - Not from any famous person (original)
                     - The story should have an immediate punch
+                    - Focus on a single, unsettling image or sound
+                    - should leave on a cliffhanger and for users to think what happens next 
 
                     Return the title and the story text as json with key 'title' and 'story' respectively, nothing else."""
 
