@@ -1,9 +1,12 @@
 import logging
 import os
+import re
 import sys
 import time
+from datetime import datetime, timedelta
 
 import pytz
+import requests
 import schedule
 from dotenv import load_dotenv
 
@@ -18,6 +21,7 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] - %(levelname)s >>
 class MultiPlatformShortsBot:
     def __init__(self):
         # Initialize components
+        self.dot_env_file = os.path.join(constants.CONFIG_DIR, '.env')
         self.story_generator = StoryGenerator()
         self.video_creator = VideoCreator()
         self.uploaders = {
@@ -84,7 +88,79 @@ class MultiPlatformShortsBot:
             logging.error(f"Error in generate_and_upload_short: {e}")
             return False
 
+    def refresh_token(self):
+        if 'facebook' in self.enabled_platforms:
+            logging.info("Refreshing Facebook access token...")
+            self._refresh_facebook_token()
+
+    def _refresh_facebook_token(self):
+        access_token = os.getenv("FACEBOOK_ACCESS_TOKEN")
+        app_id = os.getenv("FACEBOOK_APP_ID")
+        app_secret = os.getenv("FACEBOOK_APP_SECRET")
+
+        url = "https://graph.facebook.com/v23.0/oauth/access_token"
+        params = {
+            "grant_type": "fb_exchange_token",
+            "client_id": app_id,
+            "client_secret": app_secret,
+            "fb_exchange_token": access_token
+        }
+
+        logging.info("Requesting new access token...")
+        try:
+            response = requests.get(url, params=params)
+            data = response.json()
+        except Exception as e:
+            logging.error(f"Error during token refresh: {e}")
+            return
+
+        new_token = data.get("access_token")
+        expires_in = int(data.get("expires_in", 0))
+
+        if not new_token:
+            logging.error("No token returned from Facebook.")
+            return
+
+        expiry_datetime = datetime.now() + timedelta(seconds=expires_in)
+        expiry_str = expiry_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        expiry_days = expires_in // 86400
+
+        logging.info(f"New token received.")
+        logging.info(f"Expires in: {expiry_days} days")
+        logging.info(f"Expires on: {expiry_str}")
+
+        self.update_env_token('FACEBOOK_ACCESS_TOKEN', new_token)
+
+    def update_env_token(self, env_var, new_token):
+        updated_lines = []
+        token_pattern = re.compile(r'^\s*'+env_var+r'\s*=\s*.*$')
+        replaced = False
+
+        with open(self.dot_env_file, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        for line in lines:
+            if token_pattern.match(line):
+                updated_lines.append(f"{env_var}={new_token}\n")
+                replaced = True
+            else:
+                updated_lines.append(line)
+
+        if not replaced:
+            updated_lines.append(f"\n{env_var}={new_token}\n")
+
+        with open(self.dot_env_file, "w", encoding="utf-8") as f:
+            f.writelines(updated_lines)
+
+        os.environ[env_var] = new_token
+        logging.info(".env updated successfully!")
+
     def run_daily_uploads(self):
+        """Schedule and run token refresh"""
+        logging.info("Starting token refresh automation...")
+        schedule.every(55).days.at("03:00").do(self.refresh_token)
+        logging.info(f"Scheduled token refresh every 55 days at 03:00 IST.")
+
         """Schedule and run daily uploads"""
         logging.info("Starting Multi-Platform Shorts automation...")
 
@@ -115,6 +191,7 @@ if __name__ == "__main__":
     bot = MultiPlatformShortsBot()
 
     # For testing - run once
+    bot.refresh_token()
     bot.generate_and_upload_short()
 
     # For production - run scheduled uploads
