@@ -71,6 +71,12 @@ class MultiPlatformShortsBot:
                 logging.error("Failed to generate long story")
                 return False
 
+            story_text = story['story']
+            replacements = {"’": "'", "*": "", "‘": "'", "“": '"', "”": '"', "…": "...", "—": "-", "–": "-"}
+            for old_char, new_char in replacements.items():
+                story_text = story_text.replace(old_char, new_char)
+            story['story'] = story_text
+
             # Create long video
             video_path = self.video_creator.create_long_story_video(story)
             if not video_path:
@@ -240,10 +246,10 @@ class MultiPlatformShortsBot:
         logging.info("Scheduled token refresh every 55 days at 03:00 IST.")
 
         # Schedule uploads based on environment variable
-        upload_times = os.getenv('UPLOAD_TIMES', '00:00,04:00,08:00,12:00,16:00,20:00').split(',')
         tz_ist = pytz.timezone('Asia/Kolkata')
 
-        for time_str in upload_times:
+        shorts_upload_times = os.getenv('SHORTS_UPLOAD_TIMES').split(',')
+        for time_str in shorts_upload_times:
             time_str = time_str.strip()
             try:
                 # Validate time format
@@ -253,7 +259,20 @@ class MultiPlatformShortsBot:
                 logging.warning(f"Invalid time format: {time_str}. Expected HH:MM format.")
                 continue
 
-        logging.info(f"Scheduled daily uploads at: {', '.join(upload_times)} IST.")
+        logging.info(f"Scheduled daily shorts uploads at: {', '.join(shorts_upload_times)} IST.")
+
+        long_upload_times = os.getenv('LONG_UPLOAD_TIMES').split(',')
+        for time_str in long_upload_times:
+            time_str = time_str.strip()
+            try:
+                # Validate time format
+                datetime.strptime(time_str, '%H:%M')
+                schedule.every().day.at(time_str, tz_ist).do(self.generate_and_upload_long)
+            except ValueError:
+                logging.warning(f"Invalid time format: {time_str}. Expected HH:MM format.")
+                continue
+
+        logging.info(f"Scheduled daily long uploads at: {', '.join(long_upload_times)} IST.")
 
         # Main loop
         while True:
