@@ -7,3 +7,7 @@ pytz
 schedule
 python-dotenv
 google-genai
+google-cloud-texttospeech
+pydub
+nltk
+audioop-lts
