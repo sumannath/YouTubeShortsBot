@@ -58,7 +58,7 @@ class FFMPEGVideoCreator:
         self.validate_files(background_video, voiceover, background_music)
 
         # Get media info
-        logging.info("\nAnalyzing input files...")
+        logging.info("Analyzing input files...")
         voice_info = self.get_media_info(voiceover)
 
         # Determine video duration
@@ -121,13 +121,12 @@ class FFMPEGVideoCreator:
             output_file
         ]
 
-        logging.info(f"\nCreating video: {output_file}")
+        logging.info(f"Creating video: {output_file}")
         logging.info(f"Duration: {duration} seconds")
         logging.info(f"Background music volume: {bg_music_volume * 100}%")
         logging.info(f"Quality: {quality}")
-        logging.info("\nFFmpeg command:")
-        logging.info(" ".join(cmd))
-        logging.info("\nProcessing... (this may take a while)\n")
+        logging.info(f"FFmpeg command: {" ".join(cmd)}")
+        logging.info(f"Starting FFmpeg process to create video...")
 
         try:
             process = subprocess.Popen(
@@ -138,12 +137,14 @@ class FFMPEGVideoCreator:
                 bufsize=1
             )
 
-            logging.info("Starting FFmpeg process to create video...")
+            for line in process.stdout:
+                if 'frame=' in line or 'time=' in line:
+                    logging.info(f"\r{line.strip()}")
 
             process.wait()
 
             if process.returncode == 0:
-                logging.info(f"\n✓ Video created successfully: {output_file}")
+                logging.info(f"✓ Video created successfully: {output_file}")
 
                 if os.path.exists(output_file):
                     file_size = os.path.getsize(output_file) / (1024 * 1024)
@@ -151,13 +152,13 @@ class FFMPEGVideoCreator:
 
                 return output_file
             else:
-                logging.info(f"\n✗ Error: FFmpeg process failed with return code {process.returncode}")
+                logging.info(f"✗ Error: FFmpeg process failed with return code {process.returncode}")
                 return None
 
         except KeyboardInterrupt:
-            logging.info("\n\nProcess interrupted by user")
+            logging.info("Process interrupted by user")
             process.terminate()
             return None
         except Exception as e:
-            logging.info(f"\n✗ Error running FFmpeg: {e}")
+            logging.info(f"✗ Error running FFmpeg: {e}")
             return None
