@@ -5,9 +5,10 @@ import textwrap
 import warnings
 from datetime import datetime
 
-from TTS.api import TTS
+from google.cloud import texttospeech, storage
 from moviepy import VideoFileClip, TextClip, AudioFileClip, CompositeVideoClip
 from moviepy import afx, vfx
+from tenacity import sleep
 
 from config import constants
 from ffmpeg_video_creator import FFMPEGVideoCreator
@@ -76,7 +77,8 @@ class VideoCreator:
             logging.info("Creating 5-minute story video...")
 
             # Generate TTS audio
-            audio_path = self._generate_tts_audio(story['story'])
+            logging.info(f"Starting audio creation...")
+            audio_path = self._generate_tts_audio(f"{story['title']}. {story['story']}")
             if not audio_path:
                 logging.error("Failed to generate TTS audio")
                 return None
@@ -106,20 +108,59 @@ class VideoCreator:
                     logging.info(f"Long story video created successfully: {op_video_path}")
                     return op_video_path
                 else:
-                    logging.error("Failed to create long story video. Retrying...")
+                    logging.error("Failed to create long story video. Waiting 10 secs before retrying...")
+                    sleep(10)
         except Exception as e:
             logging.error(f"Error creating long story video: {e}")
             return None
 
     def _generate_tts_audio(self, text):
-        """Generate TTS audio using Azure Speech Service"""
-        # Init TTS
-        tts = TTS("tts_models/en/ljspeech/glow-tts")
+        """
+        Synthesizes long input, writing the resulting audio to `output_gcs_uri`.
 
-        # Run TTS
-        # Text to speech to a file
+        Args:
+            project_id: ID or number of the Google Cloud project you want to use.
+            output_gcs_uri: Specifies a Cloud Storage URI for the synthesis results.
+                Must be specified in the format:
+                ``gs://bucket_name/object_name``, and the bucket must
+                already exist.
+        """
+
+        client = texttospeech.TextToSpeechLongAudioSynthesizeClient()
+
+        input = texttospeech.SynthesisInput(text=text)
+
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.LINEAR16
+        )
+
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="en-US",
+            name="en-US-Chirp3-HD-Charon"
+        )
+
+        parent = f"projects/{os.environ['GCP_PROJECT_ID']}/locations/{os.environ['GCP_BUCKET_REGION']}"
+        output_blob_name = f"audio/{datetime.now().strftime('%Y%m%d_%H%M%S')}_audio.wav"
+        output_gcs_uri = f"gs://{os.environ['GCP_BUCKET_NAME']}/{os.environ['GCP_BUCKET_AUDIO_PATH']}/{output_blob_name}"
+
+        request = texttospeech.SynthesizeLongAudioRequest(
+            parent=parent,
+            input=input,
+            audio_config=audio_config,
+            voice=voice,
+            output_gcs_uri=output_gcs_uri,
+        )
+
+        operation = client.synthesize_long_audio(request=request)
+        result = operation.result(timeout=300)
+        logging.info(f"Finished processing. GCP location: {output_gcs_uri}")
+
         op_path = os.path.join(constants.DATA_DIR, 'generated_audio', 'temp_audio.wav')
-        tts.tts_to_file(text=text, file_path=op_path)
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(os.environ['GCP_BUCKET_NAME'])
+        blob = bucket.blob(f"{os.environ['GCP_BUCKET_AUDIO_PATH']}/{output_blob_name}")
+        blob.download_to_filename(op_path)
+        logging.info(f"Downloaded storage object {output_gcs_uri} to local file {op_path}.")
         return op_path
 
     def _create_short_with_assets(self, story, background_video_path, audio_path, output_filename):

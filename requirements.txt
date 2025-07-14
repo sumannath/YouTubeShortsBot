@@ -8,4 +8,4 @@ schedule
 python-dotenv
 google-genai
 google-cloud-texttospeech
-coqui-tts
+google-cloud-storage
