@@ -311,8 +311,6 @@ if __name__ == "__main__":
         logging.info("Running initial token refresh...")
         bot.refresh_token()
 
-        bot.generate_and_upload_long()
-
         # For production - run scheduled uploads
         logging.info("Starting scheduled uploads...")
         bot.run_daily_uploads()
