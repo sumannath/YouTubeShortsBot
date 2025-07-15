@@ -12,6 +12,7 @@ assets/
 config/.env
 config/client_secret.json
 config/yt_token.json
+config/svc-multiuploadyoutube-b7f21911fccf.json
 
 # Ignore version control specific directories
 .git/

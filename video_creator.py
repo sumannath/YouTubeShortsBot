@@ -22,6 +22,7 @@ class VideoCreator:
         self.fonts_folder = constants.FONTS_DIR
         self.output_folder = os.path.join(constants.DATA_DIR, 'generated_shorts')
         self.long_output_folder = os.path.join(constants.DATA_DIR, 'generated_long_videos')
+        self.generated_audio_folder = os.path.join(constants.DATA_DIR, 'generated_audio')
 
         # Ensure folders exist
         os.makedirs(self.background_videos_folder, exist_ok=True)
@@ -29,6 +30,7 @@ class VideoCreator:
         os.makedirs(self.fonts_folder, exist_ok=True)
         os.makedirs(self.output_folder, exist_ok=True)
         os.makedirs(self.long_output_folder, exist_ok=True)
+        os.makedirs(self.generated_audio_folder, exist_ok=True)
 
         # Azure TTS configuration
         self.azure_endpoint = os.getenv('AZURE_SPEECH_ENDPOINT')

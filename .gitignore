@@ -1,6 +1,7 @@
 # Project specific ignores
 config/client_secret.json
 config/yt_token.json
+config/svc-multiuploadyoutube-b7f21911fccf.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

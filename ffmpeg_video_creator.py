@@ -1,22 +1,14 @@
-import subprocess
-import os
 import json
-import shutil
-import platform
 import logging
+import os
+import subprocess
+
+from config import constants
+
 
 class FFMPEGVideoCreator:
     def __init__(self):
-        self.ffmpeg_path = self.find_ffmpeg()
-        self.ffprobe_path = self.find_ffprobe()
-
-    def find_ffmpeg(self):
-        ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
-        return ffmpeg
-
-    def find_ffprobe(self):
-        ffprobe = shutil.which("ffprobe") or "ffprobe"
-        return ffprobe
+        self.ffmpeg_docker_image = "linuxserver/ffmpeg"
 
     def validate_files(self, background_video, voiceover, background_music):
         files = {
@@ -33,10 +25,16 @@ class FFMPEGVideoCreator:
     def get_media_info(self, filepath):
         try:
             cmd = [
-                self.ffprobe_path, '-v', 'quiet', '-print_format', 'json',
-                '-show_format', '-show_streams', filepath
+                'docker', 'run', '--rm',
+                '-v', f"{constants.ASSETS_DIR}:/assets",
+                '-v', f"{constants.DATA_DIR}:/data",
+                '--entrypoint', 'ffprobe',
+                self.ffmpeg_docker_image,
+                '-v', 'quiet', '-print_format', 'json',
+                '-show_format', '-show_streams', f"/data/generated_audio/{os.path.basename(filepath)}"
             ]
             result = subprocess.run(cmd, capture_output=True, text=True)
+            logging.info(f"FFProbe command: {" ".join(cmd)}")
             if result.returncode == 0:
                 return json.loads(result.stdout)
         except Exception as e:
@@ -44,10 +42,7 @@ class FFMPEGVideoCreator:
         return None
 
     def get_font_path(self):
-        if platform.system() == "Windows":
-            return "C\\:/Windows/Fonts/arialbd.ttf"  # Arial Bold on Windows
-        else:
-            return "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"  # Linux default
+        return "/assets/fonts/Lato/Lato-Regular.ttf"
 
     def create_video(self, background_video, voiceover, background_music,
                      output_file="output_video.mp4", duration=None,
@@ -98,17 +93,38 @@ class FFMPEGVideoCreator:
             f"[voice][bg_music]amix=inputs=2:duration=first:dropout_transition=3[audio]"
         )
 
-        cmd = [
-            self.ffmpeg_path,
+        cmd = ["docker", "run", "--rm"]
+
+        if os.environ['ENV'] == 'prod':
+            cmd += [
+                "--device=/dev/dri:/dev/dri",
+                "-hwaccel", "qsv",
+            ]
+
+        cmd += [
+            '-v', f"{constants.ASSETS_DIR}:/assets",
+            '-v', f"{constants.DATA_DIR}:/data",
+            self.ffmpeg_docker_image,
             '-y',
             '-stream_loop', '-1',
-            '-i', background_video,
-            '-i', voiceover,
-            '-i', background_music,
-            '-filter_complex', filter_complex,
+            "-i", f"/assets/background_videos/{os.path.basename(background_video)}",
+            "-i", f"/data/generated_audio/{os.path.basename(voiceover)}",
+            "-i", f"/assets/audio_tracks/{os.path.basename(background_music)}",
+            "-filter_complex", filter_complex,
             '-map', '[video]',
-            '-map', '[audio]',
-            '-c:v', 'libx264',
+            '-map', '[audio]'
+        ]
+
+        if os.environ['ENV'] == 'prod':
+            cmd += [
+                '-c:v', 'h264_qsv',
+            ]
+        else:
+            cmd += [
+                '-c:v', 'libx264',
+            ]
+
+        cmd += [
             '-preset', preset_settings["preset"],
             '-crf', preset_settings["crf"],
             '-profile:v', 'high',
@@ -118,7 +134,7 @@ class FFMPEGVideoCreator:
             '-ar', '48000',
             '-t', str(duration),
             '-movflags', '+faststart',
-            output_file
+            f"/data/generated_long_videos/{os.path.basename(output_file)}"
         ]
 
         logging.info(f"Creating video: {output_file}")
