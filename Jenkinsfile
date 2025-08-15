@@ -1,7 +1,8 @@
 pipeline {
     agent any
     environment {
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        IMAGE_NAME = "sumannath/yt-shorts-bot"
+        IMAGE_TAG  = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -17,8 +18,18 @@ pipeline {
                 script{
                     sh '''
                     echo 'Build Docker Image'
-                    docker build -t sumannath/yt-shorts-bot:${BUILD_NUMBER} .
+                    docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                     '''
+                }
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds',
+                                                  usernameVariable: 'DOCKER_USER',
+                                                  passwordVariable: 'DOCKER_PASS')]) {
+                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
                 }
             }
         }
@@ -28,7 +39,7 @@ pipeline {
                 script{
                     sh '''
                     echo 'Push to Repo'
-                    docker push sumannath/yt-shorts-bot:${BUILD_NUMBER}
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
                     '''
                 }
             }
