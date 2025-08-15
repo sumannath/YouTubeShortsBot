@@ -7,7 +7,7 @@ pipeline {
     stages {
         stage('Checkout'){
            steps {
-                url: 'https://github.com/sumannath/YouTubeShortsBot.git',
+                git url: 'https://github.com/sumannath/YouTubeShortsBot.git',
                 branch: 'master'
            }
         }
