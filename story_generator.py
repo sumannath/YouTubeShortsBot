@@ -93,7 +93,7 @@ class StoryGenerator:
                     - Climax or revelation
                     - Resolution that may leave room for interpretation
 
-                    Return the title and the story text as json with key 'title' and 'story' respectively, nothing else."""
+                    Return the title, the story text and a short summary as json with key 'title', 'story' and 'summary' respectively, nothing else."""
 
         try:
             logging.info(f"Fetching long story from Gemini for category: {category}...")

@@ -97,7 +97,10 @@ class YouTubeUploader(BaseUploader):
                 return False
 
             title = f"Daily Dose of Short Stories #Shorts"
-            description = f"""🔥 Daily Dose of Short Stories
+            summary = story['summary'] if 'summary' in story else 'A chilling tale of the unknown.'
+            description = f"""🔥 Daily Dose of Stories
+            
+{summary}
 
 ✨ Follow for more stories
 💪 Tag someone who needs this
