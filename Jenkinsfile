@@ -1,48 +1,41 @@
 pipeline {
     agent any
+
     environment {
         IMAGE_NAME = "sumannath/yt-shorts-bot"
         IMAGE_TAG  = "${BUILD_NUMBER}"
     }
 
     stages {
-        stage('Checkout'){
-           steps {
-                git url: 'https://github.com/sumannath/YouTubeShortsBot.git',
-                branch: 'master'
-           }
-        }
-
-        stage('Build Docker'){
-            steps{
-                script{
-                    sh '''
-                    echo 'Build Docker Image'
-                    docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                    '''
-                }
-            }
-        }
-
-        stage('Login to Docker Hub') {
+        stage('Checkout') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds',
-                                                  usernameVariable: 'DOCKER_USER',
-                                                  passwordVariable: 'DOCKER_PASS')]) {
-                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
-                }
+                git url: 'https://github.com/sumannath/YouTubeShortsBot.git',
+                    branch: 'master'
             }
         }
 
-        stage('Push the artifacts'){
-           steps{
-                script{
-                    sh '''
-                    echo 'Push to Repo'
-                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                    '''
+        stage('Build and Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', 'docker-hub-creds') {
+                        // Build image
+                        def customImage = docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
+
+                        // Push with build number
+                        customImage.push()
+
+                        // Also push as 'latest'
+                        customImage.push("latest")
+                    }
                 }
             }
+        }
+    }
+
+    post {
+        always {
+            echo 'Cleaning up unused Docker resources...'
+            sh 'docker image prune -f || true'
         }
     }
 }
