@@ -40,6 +40,7 @@ pipeline {
                 kubectl rollout status deployment/yt-shorts-bot
                 '''
             }
+        }
     }
 
     post {
