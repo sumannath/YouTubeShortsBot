@@ -30,6 +30,16 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy to Minikube') {
+            steps {
+                sh '''
+                echo "Deploying to Minikube..."
+                kubectl set image deployment/yt-shorts-bot yt-shorts-bot=${IMAGE_NAME}:${IMAGE_TAG} --record || \
+                kubectl apply -f k8s/deployment.yaml
+                kubectl rollout status deployment/yt-shorts-bot
+                '''
+            }
     }
 
     post {
