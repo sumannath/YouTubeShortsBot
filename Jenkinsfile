@@ -18,13 +18,8 @@ pipeline {
             steps {
                 script {
                     docker.withRegistry('https://index.docker.io/v1/', 'docker-hub-creds') {
-                        // Build image
                         def customImage = docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
-
-                        // Push with build number
                         customImage.push()
-
-                        // Also push as 'latest'
                         customImage.push("latest")
                     }
                 }
@@ -32,6 +27,12 @@ pipeline {
         }
 
         stage('Deploy to Minikube') {
+            agent {
+                docker {
+                    image 'bitnami/kubectl:latest'
+                    args '-v /var/jenkins_home/.kube:/root/.kube'
+                }
+            }
             steps {
                 sh '''
                 echo "Deploying to Minikube..."
